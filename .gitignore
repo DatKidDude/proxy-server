@@ -49,3 +49,6 @@ _env/
 .DS_Store
 ntuser.dat*
 thumbs.db
+
+# testing script for server
+client.py
