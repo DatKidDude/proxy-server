@@ -30,7 +30,7 @@ class ProxyStatusCodes:
         return headers + body
     
     @staticmethod
-    def build_200_response(method: str, host: str) -> str:
+    def build_proxy_request(method: str, host: str) -> str:
         """Return the 200 response request
         
         Args:
@@ -88,7 +88,7 @@ def handle_connection(conn: socket.socket, addr: tuple) -> None:
         # Send the request back to the client
         conn.sendall(proxy_request.encode())
     else:
-        proxy_request = ProxyStatusCodes.build_200_response(method, host)
+        proxy_request = ProxyStatusCodes.build_proxy_request(method, host)
 
         # Forward the proxy request
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as proxy:
