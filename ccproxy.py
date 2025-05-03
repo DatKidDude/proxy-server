@@ -6,6 +6,50 @@ HOST = "127.0.0.1"
 PORT = 8989
 BUFSIZE = 4096
 
+class ProxyStatusCodes:
+
+    @staticmethod
+    def build_403_response(hostname: str) -> str:
+        """Return the forbidden 403 response
+        
+        Args:
+            hostname (str): Website the user is connecting to
+        
+        Returns:
+            str: HTTP header + body
+        """
+        body = f"Website not allowed: {hostname}"
+        headers = (
+            "HTTP/1.1 403 Forbidden\r\n"
+            "Content-Type: text/plain; charset=utf-8\r\n"
+            "X-Content-Type-Options: nosniff\r\n"
+            f"Content-Length: {len(body)}\r\n"
+            "\r\n"
+        )
+
+        return headers + body
+    
+    @staticmethod
+    def build_200_response(method: str, host: str) -> str:
+        """Return the 200 response request
+        
+        Args:
+            hostname (str): Website the user is connecting to
+        
+        Returns:
+            str: HTTP header + body
+        """
+        headers = (
+            f"{method}\r\n"
+            f"{host}\r\n"
+            "Connection: Keep-Alive\r\n"
+            f"X-Forwarded-For: {HOST}\r\n"
+            "\r\n"
+        )
+        
+        return headers
+
+
 def forbidden_sites(hostname: str) -> bool:
     """Check if the hostname is in the forbidden-hosts.txt file
     
@@ -40,23 +84,11 @@ def handle_connection(conn: socket.socket, addr: tuple) -> None:
     print(f"Request made. Target: {hostname} Client: {HOST}:{PORT}")
 
     if forbidden_sites(hostname):
-        body = f"Website not allowed: {hostname}"
-        proxy_request = "HTTP/1.1 403 Forbidden\r\n"
-        proxy_request += "Content-Type: text/plain; charset=utf-8\r\n"
-        proxy_request += "X-Content-Type-Options: nosniff\r\n"
-        proxy_request += f"Content-Length: {len(body)}\r\n"
-        proxy_request += "\r\n"
-        proxy_request += body
-
+        proxy_request = ProxyStatusCodes.build_403_response(hostname)
         # Send the request back to the client
         conn.sendall(proxy_request.encode())
     else:
-        # Modify the <method> request
-        proxy_request = method + "\r\n"
-        proxy_request += host + "\r\n"
-        proxy_request += f"Connection: Keep-Alive\r\n"
-        proxy_request += f"X-Forwarded-For: {HOST}\r\n"
-        proxy_request += "\r\n"
+        proxy_request = ProxyStatusCodes.build_200_response(method, host)
 
         # Forward the proxy request
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as proxy:
