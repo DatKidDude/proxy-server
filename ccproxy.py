@@ -1,10 +1,22 @@
 import socket
 import threading
+import logging
 from urllib.parse import urlparse
 
 HOST = "127.0.0.1"
 PORT = 8989
 BUFSIZE = 4096
+
+# Logging config settings
+logging.basicConfig(
+    filename="ccproxy.log",
+    encoding="utf-8",
+    filemode="w",
+    format="{asctime} {message}",
+    style="{",
+    datefmt="%Y-%m-%d %H:%M",
+    level=logging.INFO,
+)
 
 class ProxyStatusCodes:
 
@@ -88,7 +100,7 @@ def pipe(src: socket.socket, dst: socket.socket) -> None:
         pass
     finally:
         src.close()
-        dst.close()
+        dst.close()    
 
 
 def handle_connection(client_conn: socket.socket, addr: tuple) -> None:
@@ -112,11 +124,13 @@ def handle_connection(client_conn: socket.socket, addr: tuple) -> None:
         _, host = request_parsed[1].split()    
    
     print(f"Request made. Target: {host} Client: {HOST}:{PORT}")
+    logging.info(f"Client: {HOST}:{PORT} Request URL: {request_line}")
 
     if forbidden_sites(host):
         proxy_request = ProxyStatusCodes.build_403_response(host)
         # Send the request back to the client
         client_conn.sendall(proxy_request.encode())
+        logging.info(f"{HOST}:{PORT} 403 Forbidden")
         client_conn.close()
         return
     
@@ -131,6 +145,7 @@ def handle_connection(client_conn: socket.socket, addr: tuple) -> None:
 
         # Tell the client the tunnel is ready
         client_conn.sendall(b"HTTP/1.1 200 Connection Established\r\n\r\n")
+        logging.info(f"{HOST}:{PORT} 200 OK")
 
         # Start piping in both directions
         threading.Thread(target=pipe, args=(client_conn, remote_conn)).start()
@@ -152,6 +167,7 @@ def main():
     proxy.bind((HOST, PORT))
     proxy.listen()
     print(f"Starting proxy server on {HOST}:{PORT}")
+    logging.info(f"Starting proxy server on {HOST}:{PORT}")
 
     try:
         while True:
@@ -170,6 +186,7 @@ def main():
         finally:
             print("Closing proxy")
             proxy.close()
+
 
 if __name__ == "__main__":
     main()
