@@ -15,3 +15,7 @@ This project comes from the Coding Challenges website. I will leave a link to th
 
 - [Coding Challenges](https://codingchallenges.fyi)
 - [Proxy Server](https://codingchallenges.fyi/challenges/challenge-forward-proxy)
+
+## Sidenote
+
+I completed every step besides checking the webpage for forbidden words.
