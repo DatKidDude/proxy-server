@@ -41,7 +41,7 @@ class ProxyStatusCodes:
         """
         headers = (
             f"{method}\r\n"
-            f"{host}\r\n"
+            f"Host: {host}\r\n"
             "Connection: Keep-Alive\r\n"
             f"X-Forwarded-For: {HOST}\r\n"
             "\r\n"
@@ -68,46 +68,83 @@ def forbidden_sites(hostname: str) -> bool:
         return False
 
 
+def pipe(src: socket.socket, dst: socket.socket) -> None:
+    """Read data from the src socket and write data back to the destination socket
+    
+    Args:
+        src (socket.socket): Socket being read from
+        dst (socket.socket): Socket being written to
+    
+    Returns:
+        None
+    """
+    try:
+        while True:
+            data = src.recv(BUFSIZE)
+            if not data:
+                break
+            dst.sendall(data)
+    except:
+        pass
+    finally:
+        src.close()
+        dst.close()
+
+
 def handle_connection(client_conn: socket.socket, addr: tuple) -> None:
     request = client_conn.recv(BUFSIZE)
     
     # Decode and parse the request into a list 
     request_parsed = request.decode().split("\r\n")
 
-    # Extract the request method 
-    method = request_parsed[0]
+    # Get the full request line
+    request_line = request_parsed[0]
 
-    # Extract the host portion
-    host = request_parsed[1]
-    hostname = urlparse(host).path.strip()
+    # Extract the request method and the host
+    method, target, _ = request_parsed[0].split()
 
-    print(f"Request made. Target: {hostname} Client: {HOST}:{PORT}")
+    if method == "CONNECT":
+        host, port = target.split(":")
+        port = int(port)
+    else:
+        port = 80
+        # Extract the host portion
+        _, host = request_parsed[1].split()    
+   
+    print(f"Request made. Target: {host} Client: {HOST}:{PORT}")
 
-    if forbidden_sites(hostname):
-        proxy_request = ProxyStatusCodes.build_403_response(hostname)
+    if forbidden_sites(host):
+        proxy_request = ProxyStatusCodes.build_403_response(host)
         # Send the request back to the client
         client_conn.sendall(proxy_request.encode())
-    else:
-        proxy_request = ProxyStatusCodes.build_proxy_request(method, host)
+        client_conn.close()
+        return
+    
+    # Creates threads if a HTTPS tunnel needs to be made
+    if method == "CONNECT": 
+        try:
+            remote_conn = socket.create_connection((host, port))
+        except Exception as e:
+            client_conn.sendall(b"HTTP/1.1 502 Bad Gateway\r\n\r\n")
+            client_conn.close()
+            return
 
+        # Tell the client the tunnel is ready
+        client_conn.sendall(b"HTTP/1.1 200 Connection Established\r\n\r\n")
+
+        # Start piping in both directions
+        threading.Thread(target=pipe, args=(client_conn, remote_conn)).start()
+        threading.Thread(target=pipe, args=(remote_conn, client_conn)).start()
+    else:
+        proxy_request = ProxyStatusCodes.build_proxy_request(request_line, host)
+        
         # Forward the proxy request
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as remote_conn:
-            remote_conn.connect((hostname, 80))
+            remote_conn.connect((host, port))
             remote_conn.sendall(proxy_request.encode("utf-8"))
             # Add a timeout so the program doesn't get stuck on recv()
             remote_conn.settimeout(3)
-
-            try:
-                while True:
-                    data = remote_conn.recv(BUFSIZE)
-                    if not data:
-                        break
-                    client_conn.sendall(data)
-            except socket.timeout:
-                pass
-
-    client_conn.shutdown(socket.SHUT_RDWR)
-    client_conn.close()
+            pipe(remote_conn, client_conn)
 
 
 def main():
