@@ -68,8 +68,8 @@ def forbidden_sites(hostname: str) -> bool:
         return False
 
 
-def handle_connection(conn: socket.socket, addr: tuple) -> None:
-    request = conn.recv(BUFSIZE)
+def handle_connection(client_conn: socket.socket, addr: tuple) -> None:
+    request = client_conn.recv(BUFSIZE)
     
     # Decode and parse the request into a list 
     request_parsed = request.decode().split("\r\n")
@@ -86,53 +86,53 @@ def handle_connection(conn: socket.socket, addr: tuple) -> None:
     if forbidden_sites(hostname):
         proxy_request = ProxyStatusCodes.build_403_response(hostname)
         # Send the request back to the client
-        conn.sendall(proxy_request.encode())
+        client_conn.sendall(proxy_request.encode())
     else:
         proxy_request = ProxyStatusCodes.build_proxy_request(method, host)
 
         # Forward the proxy request
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as proxy:
-            proxy.connect((hostname, 80))
-            proxy.sendall(proxy_request.encode("utf-8"))
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as remote_conn:
+            remote_conn.connect((hostname, 80))
+            remote_conn.sendall(proxy_request.encode("utf-8"))
             # Add a timeout so the program doesn't get stuck on recv()
-            proxy.settimeout(3)
+            remote_conn.settimeout(3)
 
             try:
                 while True:
-                    data = proxy.recv(BUFSIZE)
+                    data = remote_conn.recv(BUFSIZE)
                     if not data:
                         break
-                    conn.sendall(data)
+                    client_conn.sendall(data)
             except socket.timeout:
                 pass
 
-    conn.shutdown(socket.SHUT_RDWR)
-    conn.close()
+    client_conn.shutdown(socket.SHUT_RDWR)
+    client_conn.close()
 
 
 def main():
-    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server.bind((HOST, PORT))
-    server.listen()
+    proxy = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    proxy.bind((HOST, PORT))
+    proxy.listen()
     print(f"Starting proxy server on {HOST}:{PORT}")
 
     try:
         while True:
-            conn, addr = server.accept()
+            conn, addr = proxy.accept()
             print(f"Connection from {addr}")
             handle_connection(conn, addr)
     except KeyboardInterrupt:
         print("Keyboard interrupt...")
     finally:
         try:
-            print("Shutting down server...")
+            print("Shutting down proxy...")
             # Socket might already be closed or disconnected 
-            server.shutdown(socket.SHUT_RDWR) 
+            proxy.shutdown(socket.SHUT_RDWR) 
         except OSError:
             pass
         finally:
-            print("Closing server")
-            server.close()
+            print("Closing proxy")
+            proxy.close()
 
 if __name__ == "__main__":
     main()
